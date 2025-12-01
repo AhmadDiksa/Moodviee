@@ -47,11 +47,28 @@ st.markdown("""
     }
     
     /* Movie Card Styling */
+    /* GANTI BAGIAN .movie-card DI CSS DENGAN INI */
     .movie-card { 
-        background-color: #161B22; border: 1px solid #30363D; border-radius: 12px; 
-        padding: 20px; margin-bottom: 20px; transition: transform 0.2s; 
+        display: flex; 
+        gap: 20px;
+        background-color: #161B22; 
+        border: 1px solid #30363D; 
+        border-radius: 12px; 
+        padding: 20px; 
+        margin-bottom: 20px; 
+        transition: transform 0.2s; 
     }
     .movie-card:hover { border-color: #A371F7; transform: translateY(-3px); }
+
+    /* Tambahan Class untuk Poster */
+    .movie-poster img {
+        width: 120px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    .movie-content {
+        flex: 1; /* Sisa ruang untuk teks */
+    }
     
     .movie-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .movie-title { font-size: 1.3rem; font-weight: 700; color: #A371F7; } /* Ungu Elegant */
