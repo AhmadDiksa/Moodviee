@@ -160,7 +160,7 @@ def load_db():
 
 @st.cache_resource
 def get_chain(api_key):
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.7, google_api_key=api_key)
+    llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.7, google_api_key=api_key)
     parser = JsonOutputParser(pydantic_object=MoodAnalysis)
     prompt = PromptTemplate(
         template="""
