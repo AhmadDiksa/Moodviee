@@ -22,12 +22,12 @@ GOOGLE_CX = st.secrets.get("SEARCH_CX", "")
 
 # --- CUSTOM CSS (DARK MODE ELEGANT & MIRIP GAMBAR) ---
 st.markdown("""
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 <style>
     /* 1. GLOBAL DARK THEME */
     .stApp { background-color: #0E1117; color: #E6EDF3; }
     
     /* 2. CHAT BUBBLES */
-    /* User: Hijau gelap elegan (Kanan) */
     .user-msg { 
         background: linear-gradient(135deg, #238636 0%, #2EA043 100%);
         color: white; 
@@ -40,7 +40,6 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
     
-    /* Bot: Abu-abu gelap (Kiri) */
     .bot-msg { 
         background-color: #21262D; 
         border: 1px solid #30363D; 
@@ -53,7 +52,7 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     
-    /* 3. MOVIE CARD DI CHAT (MIRIP GAMBAR 1) */
+    /* 3. CHAT CARD */
     .chat-card {
         background-color: #161B22;
         border: 1px solid #30363D;
@@ -85,6 +84,7 @@ st.markdown("""
         font-size: 0.8rem;
         color: #8B949E;
         margin-bottom: 8px;
+        font-family: monospace;
     }
     .card-plot {
         font-size: 0.85rem;
@@ -95,25 +95,28 @@ st.markdown("""
         overflow: hidden;
     }
     
-    /* 4. TOMBOL LIHAT DETAIL */
-    /* Kita styling tombol native streamlit agar fit di card */
+    /* 4. TOMBOL LIHAT DETAIL (STYLING KHUSUS) */
     div.stButton > button {
         background-color: #238636;
         color: white;
         border: none;
         border-radius: 6px;
-        padding: 0.25rem 1rem;
+        padding: 0.4rem 1rem;
         font-size: 0.9rem;
         width: 100%;
         margin-top: 10px;
         transition: background-color 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px; /* Jarak icon dan teks */
     }
     div.stButton > button:hover {
         background-color: #2ea043;
         color: white;
     }
     
-    /* 5. MODAL / DIALOG STYLING (MIRIP GAMBAR 2) */
+    /* 5. MODAL STYLING */
     .detail-header {
         font-size: 2rem;
         font-weight: 800;
@@ -122,26 +125,64 @@ st.markdown("""
     }
     .detail-tag {
         background-color: #30363D;
-        padding: 5px 10px;
+        padding: 4px 12px;
         border-radius: 20px;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         color: #E6EDF3;
         margin-right: 5px;
+        border: 1px solid #484f58;
     }
-    .streaming-badge {
-        display: inline-block;
-        background-color: #0D1117;
-        border: 1px solid #30363D;
-        padding: 8px 12px;
-        border-radius: 8px;
-        margin-right: 10px;
-        margin-bottom: 5px;
-        color: white;
-        text-decoration: none;
-        font-size: 0.9rem;
-    }
-    .streaming-badge:hover { border-color: #58A6FF; color: #58A6FF; }
     
+    /* Section Headers dengan Icon */
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #58A6FF;
+        margin-top: 15px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    /* Hero Image */
+    .hero-container {
+        width: 100%;
+        height: 250px;
+        overflow: hidden;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        position: relative;
+        border: 1px solid #30363D;
+    }
+    .hero-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center top;
+    }
+    
+    /* Logos */
+    .logo-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 10px;
+    }
+    .stream-logo {
+        height: 40px;
+        object-fit: contain;
+        background-color: rgba(255, 255, 255, 0.05);
+        border: 1px solid #30363D;
+        border-radius: 8px;
+        padding: 6px;
+        transition: all 0.2s ease;
+    }
+    .stream-logo:hover {
+        transform: scale(1.05);
+        border-color: #58A6FF;
+        background-color: rgba(255, 255, 255, 0.15);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -235,7 +276,98 @@ def search_links(title):
 
 # --- FITUR MODAL / POP-UP (MENGGUNAKAN ST.DIALOG) ---
 @st.dialog("🎬 Detail Film", width="large")
+# --- FITUR MODAL / POP-UP DENGAN LOGO ASLI ---
+@st.dialog("🎬 Detail Film", width="large")
+@st.dialog("🎬 Detail Film", width="large")
 def show_movie_details(movie):
+    # (Dictionary LOGO_MAP tetap sama, copy dari kode sebelumnya)
+    LOGO_MAP = {
+        "netflix": "https://upload.wikimedia.org/wikipedia/commons/7/7a/Logonetflix.png",
+        "disney": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg",
+        "hbo": "https://upload.wikimedia.org/wikipedia/commons/1/17/HBO_Max_Logo.svg",
+        "max": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg",
+        "vidio": "https://upload.wikimedia.org/wikipedia/commons/5/50/Vidio_logo_2023.svg",
+        "prime": "https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png",
+        "apple": "https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg",
+        "viu": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Viu_logo.svg",
+        "hotstar": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg",
+        "catchplay": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Catchplay_logo.png"
+    }
+
+    # Hero Image
+    if movie['backdrop']:
+        st.markdown(f"""
+        <div class="hero-container">
+            <img src="{movie['backdrop']}" class="hero-img">
+        </div>
+        """, unsafe_allow_html=True)
+    
+    col_head1, col_head2 = st.columns([3, 1])
+    with col_head1:
+        st.markdown(f"<div class='detail-header'>{movie['title']} <span style='font-size:1.2rem; font-weight:400; color:#8B949E;'>({movie['year']})</span></div>", unsafe_allow_html=True)
+        if movie['genres']:
+            tags = "".join([f"<span class='detail-tag'>{g}</span>" for g in movie['genres']])
+            # Icon Tag
+            st.markdown(f"<div style='margin-top:10px; margin-bottom:15px; display:flex; align-items:center; gap:5px;'><i class='fa-solid fa-tags' style='color:#8B949E; font-size:0.8rem;'></i> {tags}</div>", unsafe_allow_html=True)
+    
+    with col_head2:
+        score = int(movie['rating'] * 10)
+        color = "#238636" if score > 70 else "#D29922"
+        st.markdown(f"""
+        <div style="text-align:center; background:#161B22; padding:10px; border-radius:10px; border:1px solid #30363D;">
+            <div style="font-size:1.5rem; font-weight:bold; color:{color};">{score}%</div>
+            <div style="font-size:0.7rem; color:#8B949E;"><i class="fa-solid fa-chart-pie"></i> Match</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    c1, c2 = st.columns([1.5, 1])
+    
+    with c1:
+        # GANTI EMOJI DENGAN ICON FONTAWESOME
+        st.markdown('<div class="section-title"><i class="fa-solid fa-play-circle"></i> Trailer</div>', unsafe_allow_html=True)
+        if movie['trailer']:
+            st.video(movie['trailer'])
+        else:
+            st.warning("Trailer tidak tersedia.")
+            
+        st.markdown('<div class="section-title"><i class="fa-solid fa-comments"></i> Review Komunitas</div>', unsafe_allow_html=True)
+        review_text = movie['review'] if movie['review'] else "Belum ada review."
+        st.markdown(f"""
+        <div style="background-color:#161B22; padding:15px; border-radius:10px; border:1px solid #30363D;">
+            <div style="font-style:italic; color:#C9D1D9; font-family:serif;">"{review_text}"</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        st.markdown('<div class="section-title"><i class="fa-solid fa-align-left"></i> Sinopsis</div>', unsafe_allow_html=True)
+        plot_text = movie['overview'] if movie['overview'] else "Sinopsis tidak tersedia."
+        if len(plot_text) > 400: plot_text = plot_text[:400] + "..."
+        st.write(plot_text)
+        
+        st.divider()
+        st.markdown('<div class="section-title"><i class="fa-solid fa-tv"></i> Tonton di:</div>', unsafe_allow_html=True)
+        
+        if movie['links']:
+            logos_html = "<div class='logo-container'>"
+            for link in movie['links']:
+                url = link['link']
+                logo_src = None
+                for key, src in LOGO_MAP.items():
+                    if key in url.lower():
+                        logo_src = src
+                        break
+                
+                if logo_src:
+                    logos_html += f"<a href='{url}' target='_blank'><img src='{logo_src}' class='stream-logo' title='{link['title']}'></a>"
+                else:
+                    # Icon link generik jika logo tidak ada
+                    logos_html += f"<a href='{url}' target='_blank' class='detail-tag' style='text-decoration:none; line-height:40px;'><i class='fa-solid fa-arrow-up-right-from-square'></i> {link['title'][:6]}..</a>"
+            
+            logos_html += "</div>"
+            st.markdown(logos_html, unsafe_allow_html=True)
+        else:
+            st.caption("Tidak ada link legal.")
+            st.markdown(f"<a href='https://www.google.com/search?q=nonton+{movie['title'].replace(' ', '+')}' target='_blank' style='color:#58A6FF; text-decoration:none; font-size:0.9rem;'><i class='fa-brands fa-google'></i> Cari di Google</a>", unsafe_allow_html=True)
     # Header Image (Backdrop)
     st.image(movie['backdrop'], use_container_width=True)
     
@@ -290,18 +422,26 @@ def show_movie_details(movie):
 
 # --- SIDEBAR UI ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3220/3220743.png", width=60)
-    st.title("Moodie AI")
+    # Ganti Image dengan Markdown Title yang rapi
+    st.markdown("## <i class='fa-solid fa-robot'></i> Moodie AI", unsafe_allow_html=True)
     st.markdown("Your Personal Movie Therapist")
     
     st.divider()
-    gemini_key = st.text_input("🔑 Gemini API Key", type="password")
+    gemini_key = st.text_input("Gemini API Key", type="password") # Hapus emoji kunci, text input sudah punya border
     
-    st.markdown("### 🎭 Quick Mood")
+    st.markdown("### <i class='fa-solid fa-face-smile'></i> Quick Mood", unsafe_allow_html=True)
+    
+    # Gunakan st.columns untuk layout tombol
     col_moods = st.columns(3)
-    if col_moods[0].button("😭"): st.session_state.preset = "Aku sedih banget, butuh nangis."
-    if col_moods[1].button("😡"): st.session_state.preset = "Lagi marah nih!"
-    if col_moods[2].button("😍"): st.session_state.preset = "Lagi jatuh cinta."
+    # Gunakan parameter icon (Material Symbols)
+    if col_moods[0].button("Sad", icon=":material/sentiment_very_dissatisfied:", use_container_width=True): 
+        st.session_state.preset = "Aku sedih banget, butuh nangis."
+    
+    if col_moods[1].button("Mad", icon=":material/mood_bad:", use_container_width=True): 
+        st.session_state.preset = "Lagi marah nih!"
+        
+    if col_moods[2].button("Love", icon=":material/favorite:", use_container_width=True): 
+        st.session_state.preset = "Lagi jatuh cinta."
 
 # --- MAIN CHAT LOGIC ---
 if "messages" not in st.session_state:
