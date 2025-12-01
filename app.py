@@ -1,147 +1,105 @@
 import streamlit as st
 import os
 import requests
+from typing import List
+
+# --- IMPORTS UTAMA ---
 from langchain_chroma import Chroma
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
-from typing import List
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(
-    page_title="Moodie AI",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Moodie AI", page_icon="🎬", layout="wide")
 
-# --- CUSTOM CSS (MODERN DARK UI) ---
+# --- STATIC CONFIG (KUNCI YANG DISPLIT DARI UI) ---
+# Kamu bisa menaruh kunci asli di sini (Hardcode) ATAU di st.secrets (Recommended)
+# Agar aman saat deploy, sebaiknya gunakan st.secrets di Streamlit Cloud.
+# Jika testing lokal, kamu bisa ganti string kosong "" di bawah dengan API Key aslimu.
+
+TMDB_API_KEY = st.secrets.get("TMDB_API_KEY", "MASUKKAN_KEY_TMDB_DISINI_JIKA_LOKAL")
+GOOGLE_SEARCH_KEY = st.secrets.get("SEARCH_KEY", "MASUKKAN_KEY_SEARCH_DISINI_JIKA_LOKAL")
+GOOGLE_CX = st.secrets.get("SEARCH_CX", "MASUKKAN_ID_CX_DISINI_JIKA_LOKAL")
+
+# --- CUSTOM CSS (DARK MODE ELEGANT) ---
 st.markdown("""
 <style>
-    /* Background & Main Colors */
-    .stApp {
-        background-color: #0E1117;
-        color: #FAFAFA;
-    }
+    /* Background & Text */
+    .stApp { background-color: #0E1117; color: #E6EDF3; }
     
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #161B22;
-        border-right: 1px solid #30363D;
-    }
+    /* Sidebar */
+    section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363D; }
     
-    /* Chat Message Bubbles */
-    .user-msg {
-        background-color: #238636;
-        color: white;
-        padding: 10px 15px;
-        border-radius: 15px 15px 0 15px;
-        margin-bottom: 10px;
-        text-align: right;
-        display: inline-block;
-        max-width: 80%;
-        float: right;
+    /* Chat Bubbles */
+    .user-msg { 
+        background-color: #238636; color: white; padding: 12px 18px; 
+        border-radius: 18px 18px 0 18px; margin-bottom: 10px; 
+        text-align: right; float: right; max-width: 80%; 
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
-    .bot-msg {
-        background-color: #1F242C;
-        border: 1px solid #30363D;
-        color: #E6EDF3;
-        padding: 10px 15px;
-        border-radius: 15px 15px 15px 0;
-        margin-bottom: 10px;
-        display: inline-block;
-        max-width: 80%;
+    .bot-msg { 
+        background-color: #1F242C; border: 1px solid #30363D; color: #E6EDF3; 
+        padding: 12px 18px; border-radius: 18px 18px 18px 0; margin-bottom: 10px; 
+        display: inline-block; max-width: 80%; 
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
     
     /* Movie Card Styling */
-    .movie-card {
-        background-color: #161B22;
-        border: 1px solid #30363D;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 15px;
-        transition: transform 0.2s;
+    .movie-card { 
+        background-color: #161B22; border: 1px solid #30363D; border-radius: 12px; 
+        padding: 20px; margin-bottom: 20px; transition: transform 0.2s; 
     }
-    .movie-card:hover {
-        border-color: #58A6FF;
-        transform: translateY(-2px);
-    }
-    .movie-title {
-        font-size: 1.2rem;
-        font-weight: bold;
-        color: #58A6FF;
-        margin-bottom: 5px;
-    }
-    .movie-meta {
-        font-size: 0.85rem;
-        color: #8B949E;
-        margin-bottom: 10px;
-    }
-    .movie-plot {
-        font-size: 0.9rem;
-        color: #C9D1D9;
-        margin-bottom: 10px;
+    .movie-card:hover { border-color: #A371F7; transform: translateY(-3px); }
+    
+    .movie-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .movie-title { font-size: 1.3rem; font-weight: 700; color: #A371F7; } /* Ungu Elegant */
+    .movie-rating { background-color: #30363D; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; }
+    
+    .movie-plot { font-size: 0.95rem; color: #C9D1D9; line-height: 1.6; margin-bottom: 15px; }
+    .review-box { 
+        background-color: #0d1117; padding: 12px; border-left: 3px solid #238636; 
+        font-style: italic; color: #8B949E; font-size: 0.9rem; margin-bottom: 15px; border-radius: 0 6px 6px 0;
     }
     
     /* Link Button */
-    .stream-btn {
-        display: inline-block;
-        padding: 5px 10px;
-        background-color: #238636;
-        color: white !important;
-        text-decoration: none;
-        border-radius: 5px;
-        font-size: 0.8rem;
-        margin-right: 5px;
+    .stream-link { 
+        display: inline-block; background-color: #238636; color: white !important; 
+        padding: 8px 15px; border-radius: 20px; text-decoration: none; 
+        margin-right: 8px; margin-top: 5px; font-size: 0.85rem; font-weight: 600;
+        transition: background-color 0.2s;
     }
+    .stream-link:hover { background-color: #2ea043; }
+    .trailer-link { color: #58A6FF; text-decoration: none; font-weight: bold; margin-left: 10px; font-size: 0.9rem; }
+    
 </style>
 """, unsafe_allow_html=True)
 
-# --- DATA MODELS ---
+# --- CLASS DATA (DARI FILE ASLI) ---
 class MoodAnalysis(BaseModel):
     detected_moods: List[str] = Field(description="List of detected emotions")
     summary: str = Field(description="Short empathetic summary")
-    recommended_genres: List[str] = Field(description="Genres suitable for mood")
     search_keywords: str = Field(description="English paragraph describing movie PLOT")
 
-# --- BACKEND LOGIC (CACHED) ---
+# --- BACKEND LOGIC ---
 @st.cache_resource
-def load_vector_store():
-    # Pastikan folder chroma_db ada di root folder
-    if not os.path.exists("./chroma_db"):
-        st.error("❌ Database tidak ditemukan! Pastikan folder 'chroma_db' sudah di-upload.")
-        return None
-    
+def load_db():
+    if not os.path.exists("./chroma_db"): return None
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    vector_store = Chroma(
-        embedding_function=embeddings,
-        persist_directory="./chroma_db",
-        collection_name="tmdb_movies"
-    )
-    return vector_store
+    return Chroma(embedding_function=embeddings, persist_directory="./chroma_db", collection_name="tmdb_movies")
 
-def get_gemini_chain(api_key):
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-latest", 
-        temperature=0.7, 
-        google_api_key=api_key
-    )
+@st.cache_resource
+def get_chain(api_key):
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.7, google_api_key=api_key)
     parser = JsonOutputParser(pydantic_object=MoodAnalysis)
     prompt = PromptTemplate(
         template="""
-        You are an empathetic Movie Therapist named Moodie.
-        
+        You are an empathetic Movie Therapist.
         HISTORY: {chat_history}
-        USER INPUT: "{user_input}"
+        INPUT: "{user_input}"
         
-        Analyze the input and provide a JSON response with:
-        1. detected_moods (list of strings)
-        2. summary (empathetic response to user)
-        3. recommended_genres (list)
-        4. search_keywords (a plot description for semantic search)
-        
+        Analyze mood and create a movie plot search query.
         {format_instructions}
         """,
         input_variables=["user_input", "chat_history"],
@@ -149,125 +107,159 @@ def get_gemini_chain(api_key):
     )
     return prompt | llm | parser
 
-def get_movie_details(movie_id, tmdb_key):
-    """Simple detail fetcher without too much overhead"""
-    if not tmdb_key: return {"runtime": "N/A", "poster": None}
-    
+def get_details(movie_id):
+    """Menggunakan TMDB_API_KEY Static"""
+    if "MASUKKAN" in TMDB_API_KEY: return {"runtime": "N/A", "review": "API Key TMDB belum diset developer.", "trailer": "#"}
     try:
-        url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={tmdb_key}"
+        url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&append_to_response=videos,reviews"
         data = requests.get(url).json()
-        poster_path = data.get('poster_path')
-        poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
-        return {"runtime": f"{data.get('runtime', 0)} min", "poster": poster_url, "vote": data.get('vote_average', 0)}
-    except:
-        return {"runtime": "N/A", "poster": None, "vote": 0}
-
-# --- SIDEBAR UI ---
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2503/2503508.png", width=50) # Placeholder logo
-    st.title("Moodie AI")
-    st.markdown("Your Personal Movie Therapist")
-    
-    st.divider()
-    
-    # API KEY MANAGEMENT
-    # Di Cloud, kita pakai st.secrets. Di lokal, bisa input manual.
-    if "GOOGLE_API_KEY" in st.secrets:
-        gemini_key = st.secrets["GOOGLE_API_KEY"]
-    else:
-        gemini_key = st.text_input("Gemini API Key", type="password")
         
-    if "TMDB_API_KEY" in st.secrets:
-        tmdb_key = st.secrets["TMDB_API_KEY"]
+        # Trailer
+        videos = data.get("videos", {}).get("results", [])
+        trailer = next((f"https://www.youtube.com/watch?v={v['key']}" for v in videos if v["type"]=="Trailer"), None)
+        
+        # Review Snippet
+        reviews = data.get("reviews", {}).get("results", [])
+        snippet = reviews[0]['content'][:250] + "..." if reviews else "Belum ada review populer."
+        
+        return {"runtime": f"{data.get('runtime', 'N/A')} min", "review": snippet, "trailer": trailer}
+    except:
+        return {"runtime": "N/A", "review": "Gagal load data.", "trailer": None}
+
+def search_links(title):
+    """Menggunakan GOOGLE_SEARCH_KEY & CX Static"""
+    if "MASUKKAN" in GOOGLE_SEARCH_KEY or "MASUKKAN" in GOOGLE_CX: return []
+    try:
+        query = f'watch "{title}" movie streaming'
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {"key": GOOGLE_SEARCH_KEY, "cx": GOOGLE_CX, "q": query, "num": 8}
+        res = requests.get(url, params=params).json()
+        
+        links = []
+        allowed = ["netflix", "disneyplus", "hotstar", "vidio", "primevideo", "hbo", "apple", "viu", "wetv"]
+        
+        if "items" in res:
+            for item in res["items"]:
+                link = item.get("link", "").lower()
+                title_res = item.get("title", "").lower()
+                
+                # Filter Sederhana
+                if any(p in link for p in allowed) and title.lower().split("(")[0].strip() in title_res:
+                    links.append({"title": item["title"], "link": item["link"]})
+        return links[:2] # Ambil max 2 link
+    except:
+        return []
+
+# --- SIDEBAR (USER INPUT) ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3220/3220743.png", width=60)
+    st.title("Moodie AI")
+    st.markdown("Siapkan popcorn, aku siapin filmnya. 🍿")
+    
+    st.divider()
+    
+    # INPUT USER HANYA GEMINI
+    gemini_key = st.text_input("🔑 Masukkan Gemini API Key:", type="password", help="Dapatkan gratis di aistudio.google.com")
+    
+    if not gemini_key:
+        st.warning("⚠️ Masukkan Key dulu untuk chat.")
     else:
-        tmdb_key = st.text_input("TMDB API Key", type="password")
+        st.success("✅ Terhubung!")
 
     st.divider()
-    st.markdown("### 🎭 Quick Moods")
-    cols = st.columns(3)
-    if cols[0].button("😢 Sad"): st.session_state.preset_input = "I'm feeling very sad and need a cry."
-    if cols[1].button("😡 Angry"): st.session_state.preset_input = "I am so angry right now!"
-    if cols[2].button("😴 Bored"): st.session_state.preset_input = "I'm bored, surprise me."
+    if st.button("🗑️ Hapus Memori Chat"):
+        st.session_state.messages = []
+        st.rerun()
 
-# --- MAIN UI ---
-st.title("Apa yang kamu rasakan hari ini?")
-st.markdown("_Ceritakan harimu, dan aku akan pilihkan film yang pas._")
+# --- MAIN CHAT UI ---
+st.title("Lagi ngerasa apa hari ini?")
 
-# Initialize Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display Chat History
-for message in st.session_state.messages:
-    role_class = "user-msg" if message["role"] == "user" else "bot-msg"
-    with st.container():
-        if message["role"] == "user":
-            st.markdown(f'<div style="text-align: right;"><div class="{role_class}">{message["content"]}</div></div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="{role_class}">{message["content"]}</div>', unsafe_allow_html=True)
-            # Jika ada rekomendasi film, render cards
-            if "movies" in message:
-                cols = st.columns(len(message["movies"]))
-                for idx, movie in enumerate(message["movies"]):
-                    with cols[idx]:
-                        st.markdown(f"""
-                        <div class="movie-card">
-                            <img src="{movie['poster']}" style="width:100%; border-radius:5px; margin-bottom:10px;">
-                            <div class="movie-title">{movie['title']}</div>
-                            <div class="movie-meta">⭐ {movie['rating']} | ⏳ {movie['runtime']}</div>
-                            <div class="movie-plot">{movie['plot'][:100]}...</div>
-                            <a href="https://www.google.com/search?q=watch+{movie['title'].replace(' ', '+')}" target="_blank" class="stream-btn">▶ Cari Streaming</a>
-                        </div>
-                        """, unsafe_allow_html=True)
+# Render Chat
+for msg in st.session_state.messages:
+    if msg["role"] == "user":
+        st.markdown(f'<div class="user-msg">{msg["content"]}</div><div style="clear:both;"></div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="bot-msg">{msg["content"]}</div>', unsafe_allow_html=True)
+        
+        # Render Movie Cards jika ada
+        if "movies" in msg:
+            for mov in msg["movies"]:
+                # Tombol Streaming
+                stream_btns = ""
+                if mov['links']:
+                    for link in mov['links']:
+                        platform_name = "Link Nonton"
+                        if "netflix" in link['link']: platform_name = "Netflix"
+                        elif "disney" in link['link']: platform_name = "Disney+"
+                        elif "vidio" in link['link']: platform_name = "Vidio"
+                        elif "apple" in link['link']: platform_name = "Apple TV"
+                        
+                        stream_btns += f'<a href="{link["link"]}" target="_blank" class="stream-link">▶ {platform_name}</a>'
+                else:
+                    stream_btns = '<span style="font-size:0.8rem; color:grey;">(Tidak ada link legal ditemukan)</span>'
+                
+                trailer_html = f'<a href="{mov["trailer"]}" target="_blank" class="trailer-link">🎬 Trailer</a>' if mov["trailer"] else ""
 
-# Handle Input (Text Input or Button Preset)
-user_input = st.chat_input("Ketik perasaanmu di sini...")
-if "preset_input" in st.session_state and st.session_state.preset_input:
-    user_input = st.session_state.preset_input
-    st.session_state.preset_input = None # Reset
+                st.markdown(f"""
+                <div class="movie-card">
+                    <div class="movie-header">
+                        <div class="movie-title">{mov['title']} <span style="color:#8B949E; font-size:1rem;">({mov['year']})</span></div>
+                        <div class="movie-rating">⭐ {mov['rating']}</div>
+                    </div>
+                    <div class="movie-plot">{mov['plot']}</div>
+                    <div style="margin-bottom:10px; font-size:0.9rem; color:#8B949E;">⏳ {mov['runtime']} {trailer_html}</div>
+                    <div class="review-box">"{mov['review']}"</div>
+                    {stream_btns}
+                </div>
+                """, unsafe_allow_html=True)
 
-if user_input and gemini_key:
-    # 1. Simpan input user
+# Input Box
+if user_input := st.chat_input("Aku lagi sedih banget, butuh hiburan...") and gemini_key:
     st.session_state.messages.append({"role": "user", "content": user_input})
-    st.rerun() # Refresh untuk menampilkan pesan user dulu
+    st.rerun()
 
-# Logic processing (dijalankan setelah rerun)
+# Proses AI
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    last_user_msg = st.session_state.messages[-1]["content"]
-    
-    with st.spinner("🤖 Moodie sedang menganalisis perasaanmu..."):
+    with st.spinner("🔍 Menganalisis mood & mencari film di database..."):
         try:
-            # Load DB & Chain
-            vector_store = load_vector_store()
-            chain = get_gemini_chain(gemini_key)
+            db = load_db()
+            chain = get_chain(gemini_key)
             
-            # History Context
-            history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-3:]])
+            # History
+            history = "\n".join([f"{m['role']}: {m.get('content','')}" for m in st.session_state.messages[-3:]])
+            user_msg = st.session_state.messages[-1]["content"]
             
-            # Analyze
-            analysis = chain.invoke({"user_input": last_user_msg, "chat_history": history_text})
+            # 1. Analisis Mood
+            analysis = chain.invoke({"user_input": user_msg, "chat_history": history})
             
-            # Search Movies
-            docs = vector_store.similarity_search(analysis['search_keywords'], k=3)
+            # 2. Cari Film di Chroma
+            docs = db.similarity_search(analysis['search_keywords'], k=3)
             
-            movie_results = []
+            movies_found = []
             for doc in docs:
                 meta = doc.metadata
-                details = get_movie_details(meta['id'], tmdb_key)
-                movie_results.append({
+                # 3. Ambil Detail (TMDB & Link) pakai Static Keys
+                details = get_details(meta['id'])
+                links = search_links(meta['title'])
+                
+                movies_found.append({
                     "title": meta['title'],
-                    "rating": f"{meta.get('rating', 'N/A'):.1f}",
-                    "year": meta.get('year', ''),
+                    "year": meta['year'],
+                    "rating": meta['rating'],
+                    "plot": doc.page_content.split("Plot: ")[-1][:180] + "...",
                     "runtime": details['runtime'],
-                    "poster": details['poster'] or "https://via.placeholder.com/300x450?text=No+Poster",
-                    "plot": doc.page_content.split("Plot: ")[-1]
+                    "review": details['review'],
+                    "trailer": details['trailer'],
+                    "links": links
                 })
             
-            # Simpan respons bot
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": f"{analysis['summary']}\n\n*Mood terdeteksi: {', '.join(analysis['detected_moods'])}*",
-                "movies": movie_results
+                "content": f"{analysis['summary']}",
+                "movies": movies_found
             })
             st.rerun()
             
