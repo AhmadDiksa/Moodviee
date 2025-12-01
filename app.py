@@ -124,7 +124,7 @@ def load_vector_store():
 
 def get_gemini_chain(api_key):
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash", 
+        model="gemini-flash-latest", 
         temperature=0.7, 
         google_api_key=api_key
     )
