@@ -164,7 +164,7 @@ with st.sidebar:
     if not gemini_key:
         st.warning("⚠️ Masukkan Key dulu untuk chat.")
     else:
-        st.success("✅ Terhubung!")
+        st.success("Terhubung!")
 
     st.divider()
     if st.button("🗑️ Hapus Memori Chat"):
@@ -217,51 +217,106 @@ for msg in st.session_state.messages:
                 """, unsafe_allow_html=True)
 
 # Input Box
-if user_input := st.chat_input("Aku lagi sedih banget, butuh hiburan...") and gemini_key:
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    st.rerun()
+# 1. Cek apakah Gemini Key sudah diisi di Sidebar
+if not gemini_key:
+    # Jika belum isi Key, tampilkan peringatan dan matikan input
+    st.info("⬅️ Silakan masukkan Gemini API Key di menu sebelah kiri untuk memulai chat.")
+    # Kita hentikan eksekusi di sini agar tidak error
+    st.stop()
 
-# Proses AI
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    with st.spinner("🔍 Menganalisis mood & mencari film di database..."):
-        try:
-            db = load_db()
-            chain = get_chain(gemini_key)
-            
-            # History
-            history = "\n".join([f"{m['role']}: {m.get('content','')}" for m in st.session_state.messages[-3:]])
-            user_msg = st.session_state.messages[-1]["content"]
-            
-            # 1. Analisis Mood
-            analysis = chain.invoke({"user_input": user_msg, "chat_history": history})
-            
-            # 2. Cari Film di Chroma
-            docs = db.similarity_search(analysis['search_keywords'], k=3)
-            
-            movies_found = []
-            for doc in docs:
-                meta = doc.metadata
-                # 3. Ambil Detail (TMDB & Link) pakai Static Keys
-                details = get_details(meta['id'])
-                links = search_links(meta['title'])
+# 2. Input Box (Hanya muncul jika Key sudah ada)
+user_input = st.chat_input("Ceritakan perasaanmu, aku butuh hiburan...")
+
+# 3. Jika user mengetik sesuatu dan menekan Enter
+if user_input:
+    # Tampilkan pesan user ke layar
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(f'<div class="user-msg">{user_input}</div>', unsafe_allow_html=True)
+
+    # 4. Proses AI
+    with st.chat_message("assistant"):
+        with st.spinner("🔍 Menganalisis mood & mencari film..."):
+            try:
+                # Load DB & Chain
+                db = load_db()
+                if not db:
+                    st.error("Database 'chroma_db' tidak ditemukan! Pastikan foldernya ada.")
+                    st.stop()
+
+                chain = get_chain(gemini_key)
                 
-                movies_found.append({
-                    "title": meta['title'],
-                    "year": meta['year'],
-                    "rating": meta['rating'],
-                    "plot": doc.page_content.split("Plot: ")[-1][:180] + "...",
-                    "runtime": details['runtime'],
-                    "review": details['review'],
-                    "trailer": details['trailer'],
-                    "links": links
+                # Siapkan History Chat
+                history = "\n".join([f"{m['role']}: {m.get('content','')}" for m in st.session_state.messages[-3:]])
+                
+                # --- TAHAP 1: ANALISIS MOOD ---
+                analysis = chain.invoke({"user_input": user_input, "chat_history": history})
+                
+                # --- TAHAP 2: CARI FILM ---
+                docs = db.similarity_search(analysis['search_keywords'], k=3)
+                
+                movies_found = []
+                for doc in docs:
+                    meta = doc.metadata
+                    # Ambil detail tambahan (TMDB & Streaming)
+                    details = get_details(meta['id'])
+                    links = search_links(meta['title'])
+                    
+                    movies_found.append({
+                        "title": meta['title'],
+                        "year": meta['year'],
+                        "rating": meta['rating'],
+                        "plot": doc.page_content.split("Plot: ")[-1][:180] + "...",
+                        "runtime": details['runtime'],
+                        "review": details['review'],
+                        "trailer": details['trailer'],
+                        "links": links
+                    })
+                
+                # --- TAHAP 3: TAMPILKAN HASIL ---
+                
+                # Teks Balasan Bot
+                st.markdown(f'<div class="bot-msg">{analysis["summary"]}</div>', unsafe_allow_html=True)
+                
+                # Kartu Film
+                for mov in movies_found:
+                    # Buat tombol streaming
+                    stream_btns = ""
+                    if mov['links']:
+                        for link in mov['links']:
+                            platform_name = "Link Nonton"
+                            if "netflix" in link['link']: platform_name = "Netflix"
+                            elif "disney" in link['link']: platform_name = "Disney+"
+                            elif "vidio" in link['link']: platform_name = "Vidio"
+                            elif "apple" in link['link']: platform_name = "Apple TV"
+                            elif "prime" in link['link']: platform_name = "Prime Video"
+                            elif "hbo" in link['link']: platform_name = "HBO"
+                            
+                            stream_btns += f'<a href="{link["link"]}" target="_blank" class="stream-link">▶ {platform_name}</a>'
+                    else:
+                        stream_btns = '<span style="font-size:0.8rem; color:grey;">(Tidak ada link legal ditemukan)</span>'
+                    
+                    trailer_html = f'<a href="{mov["trailer"]}" target="_blank" class="trailer-link">🎬 Trailer</a>' if mov["trailer"] else ""
+
+                    st.markdown(f"""
+                    <div class="movie-card">
+                        <div class="movie-header">
+                            <div class="movie-title">{mov['title']} <span style="color:#8B949E; font-size:1rem;">({mov['year']})</span></div>
+                            <div class="movie-rating">⭐ {mov['rating']}</div>
+                        </div>
+                        <div class="movie-plot">{mov['plot']}</div>
+                        <div style="margin-bottom:10px; font-size:0.9rem; color:#8B949E;">⏳ {mov['runtime']} {trailer_html}</div>
+                        <div class="review-box">"{mov['review']}"</div>
+                        {stream_btns}
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Simpan ke session state agar tidak hilang saat reload
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": analysis['summary'],
+                    "movies": movies_found
                 })
-            
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"{analysis['summary']}",
-                "movies": movies_found
-            })
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"Terjadi kesalahan: {e}")
+                
+            except Exception as e:
+                st.error(f"Terjadi kesalahan: {e}")
