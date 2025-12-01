@@ -7,3 +7,4 @@ langchain-google-genai
 langchain-huggingface
 requests
 pydantic
+sentence-transformers
